@@ -26,3 +26,8 @@ router.post('/login', async (req, res) => {
 });
 
 module.exports = router;
+
+
+
+//  curl -X POST http://localhost:4000/auth/register   -H "Content-Type: applicatio
+// n/json"   -d '{"email": "testuser@example.com", "password": "Test@1234"}'
