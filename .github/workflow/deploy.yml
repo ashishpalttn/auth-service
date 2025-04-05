@@ -1,0 +1,38 @@
+name: Deploy Lambda Auth API
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Bundle and Zip
+        run: |
+          mkdir -p lambda-package
+          cp -r * lambda-package/
+          cd lambda-package
+          zip -r ../function.zip .
+
+      - name: Deploy to AWS Lambda
+        uses: appleboy/lambda-action@master
+        with:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_region: ap-south-1
+          function_name: my-lambda-api
+          zip_file: function.zip
+          publish: true

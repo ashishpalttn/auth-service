@@ -1,0 +1,17 @@
+{
+    "name": "lambda-auth",
+    "version": "1.0.0",
+    "main": "lambda.js",
+    "scripts": {
+      "start": "node src/server.js"
+    },
+    "dependencies": {
+      "@vendia/serverless-express": "^4.7.2",
+      "bcryptjs": "^2.4.3",
+      "dotenv": "^16.3.1",
+      "express": "^4.18.2",
+      "jsonwebtoken": "^9.0.0"
+    }
+  }
+
+  
