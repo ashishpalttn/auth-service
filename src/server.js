@@ -5,6 +5,10 @@ const authRoutes = require('./auth/auth.controller');
 const { authenticateJWT } = require('./auth/auth.middleware');
 
 app.use(express.json());
+//for testing
+app.get("/", (req, res) => {
+    res.send("Lambda is working 🚀");
+  });
 
 // Public Routes
 app.use('/auth', authRoutes);
