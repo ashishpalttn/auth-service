@@ -26,7 +26,7 @@ jobs:
           cp -r * lambda-package/
           cd lambda-package
           zip -r ../function.zip .
-
+ 
       - name: Deploy to AWS Lambda
         uses: appleboy/lambda-action@master
         with:
