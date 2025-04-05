@@ -23,7 +23,7 @@ jobs:
       - name: Bundle and Zip
         run: |
           mkdir -p lambda-package
-          cp -r * lambda-package/
+          rsync -av --exclude=lambda-package --exclude='.git' ./ lambda-package/
           cd lambda-package
           zip -r ../function.zip .
  
