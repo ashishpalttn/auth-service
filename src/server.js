@@ -17,6 +17,10 @@ app.get("/", (req, res) => {
   res.send("✅ Lambda is working 🚀");
 });
 
+app.get("/default", (req, res) => {
+    res.send("✅ default route check🚀");
+  });
+
 // Public routes
 app.use('/auth', authRoutes);
 
