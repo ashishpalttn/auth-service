@@ -6,11 +6,6 @@ const { generateToken } = require('../utils/jwt');
 const router = express.Router();
 const users = []; // In-memory for demo
 
-app.use((req, res, next) => {
-  console.log(`📥 Incoming request: ${req.method} ${req.originalUrl}`);
-  next();
-});
-
 router.post('/register', async (req, res) => {
   const { email, password } = req.body;
   const hashed = await bcrypt.hash(password, 10);

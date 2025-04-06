@@ -7,6 +7,11 @@ const { authenticateJWT } = require('./auth/auth.middleware');
 
 app.use(express.json());
 
+app.use((req, res, next) => {
+    console.log(`📥 Incoming request: ${req.method} ${req.originalUrl}`);
+    next();
+  });
+
 // Health check route
 app.get("/", (req, res) => {
   res.send("✅ Lambda is working 🚀");
