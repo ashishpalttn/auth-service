@@ -10,7 +10,7 @@ app.use(express.json());
 app.use((req, res, next) => {
     console.log(`📥 Incoming request: ${req.method} ${req.originalUrl}`);
     next();
-  });
+});
 
 // Health check route
 app.get("/", (req, res) => {
@@ -19,6 +19,10 @@ app.get("/", (req, res) => {
 
 app.get("/default", (req, res) => {
     res.send("✅ default route check🚀");
+  });
+
+  app.get("/verify", (req, res) => {
+    res.send("✅ verify route check🚀");
   });
 
 // Public routes
