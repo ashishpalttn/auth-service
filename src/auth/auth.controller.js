@@ -2,7 +2,10 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { generateToken } = require('../utils/jwt');
-const AWS = require('aws-sdk')
+const AWS = require('aws-sdk');
+
+// Set AWS region
+AWS.config.update({ region: process.env.AWS_REGION || 'ap-south-1' });
 
 const router = express.Router();
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
