@@ -31,7 +31,36 @@ router.post('/register', async (req, res) => {
     }
 });
 
+router.post('/signup', async (req, res) => {
+  const {name, mobile, email, } = req.body;
+
+    // Save user to DynamoDB
+    const params = {
+      TableName: 'Users',
+      Item: {
+        name,
+        mobile,
+        email,  
+      },
+    };
+    try {
+      await dynamoDB.put(params).promise();
+      res.json({ message: 'Signup successfully done' });
+    } catch (error) {
+      console.error('DynamoDB Error:', error);
+      res.status(500).json({ error: 'Could not register user' });
+    }
+});
+
 router.post('/login', async (req, res) => {
+  // const sns = new AWS.SNS();
+  // const  phoneNumber  = 9918434680;
+  // const otp = Math.floor(100000 + Math.random() * 900000);
+  // const sendOTP = async (phoneNumber, otp) => {
+  //   const params = {
+  //     Message: `Your OTP is ${otp}`,
+  //     PhoneNumber: phoneNumber, // in E.164 format, e.g., +911234567890
+  //   };
   const { email, password } = req.body;
     // Retrieve user from DynamoDB
     const params = {
