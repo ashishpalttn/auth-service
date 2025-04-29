@@ -2,7 +2,7 @@ name: Deploy Lambda Auth API
 
 on:
   push:
-    branches: [main]
+    branches: [develop]
 
 jobs:
   deploy:

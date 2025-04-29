@@ -24,7 +24,7 @@ router.post('/register', async (req, res) => {
     };
     try {
       await dynamoDB.put(params).promise();
-      res.json({ message: 'Registered successfully' });
+      res.json({ message: 'Registered successfully done' });
     } catch (error) {
       console.error('DynamoDB Error:', error);
       res.status(500).json({ error: 'Could not register user' });
