@@ -13,8 +13,6 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 router.post('/register', async (req, res) => {
   const { email, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Save user to DynamoDB
     const params = {
       TableName: 'Users',
       Item: {
@@ -31,36 +29,7 @@ router.post('/register', async (req, res) => {
     }
 });
 
-router.post('/signup', async (req, res) => {
-  const {name, mobile, email, } = req.body;
-
-    // Save user to DynamoDB
-    const params = {
-      TableName: 'Users',
-      Item: {
-        name,
-        mobile,
-        email,  
-      },
-    };
-    try {
-      await dynamoDB.put(params).promise();
-      res.json({ message: 'Signup successfully done' });
-    } catch (error) {
-      console.error('DynamoDB Error:', error);
-      res.status(500).json({ error: 'Could not register user' });
-    }
-});
-
 router.post('/login', async (req, res) => {
-  // const sns = new AWS.SNS();
-  // const  phoneNumber  = 9918434680;
-  // const otp = Math.floor(100000 + Math.random() * 900000);
-  // const sendOTP = async (phoneNumber, otp) => {
-  //   const params = {
-  //     Message: `Your OTP is ${otp}`,
-  //     PhoneNumber: phoneNumber, // in E.164 format, e.g., +911234567890
-  //   };
   const { email, password } = req.body;
     // Retrieve user from DynamoDB
     const params = {
@@ -92,9 +61,139 @@ router.post('/login', async (req, res) => {
     }
 });
 
+
+
+router.post('/signup-otp', async (req, res) => {
+  const {name, mobile, email, } = req.body;
+    const params = {
+      TableName: 'user-otp',
+      Item: {
+        name,
+        mobile,
+        email,  
+      },
+    };
+    try {
+      await dynamoDB.put(params).promise();
+      res.json({ message: 'Signup successfully done' });
+    } catch (error) {
+      console.error('DynamoDB Error:', error);
+      res.status(500).json({ error: 'mobile no. is required' });
+    }
+});
+
+router.post('/login-otp', async (req, res) => {
+  console.log("login-otp triggered");
+  const { mobile } = req.body;
+
+  // Check if mobile exists in Users table
+  const getParams = {
+    TableName: 'user-otp',
+    Key: { mobile }, // Fixed typo: changed 'key' to 'Key'
+  };
+
+  try {
+    const result = await dynamoDB.get(getParams).promise();
+    const user = result.Item;
+
+    if (!user) {
+      return res.status(404).json({ error: 'User is not registered' });
+    }
+    console.log("number is found", user);
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Calculate OTP expiration time (10 minutes from now) in IST
+    const otpExpireTime = new Date(Date.now() + 10 * 60 * 1000)
+      .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+    // Send OTP using AWS SNS
+    const sns = new AWS.SNS();
+    const snsParams = {
+      Message: `Your live bazar login OTP is- ${otp}`,
+      PhoneNumber: `+91${mobile}`,
+    };
+
+    console.log("SNS Params:", snsParams); // Log SNS parameters
+
+    try {
+      const snsResponse = await sns.publish(snsParams).promise();
+      console.log("SNS Response:", snsResponse); // Log SNS response
+    } catch (snsError) {
+      console.error("SNS Error:", snsError); // Log SNS error
+      return res.status(500).json({ error: 'Failed to send OTP' });
+    }
+
+    // Save OTP and expiration time in Users table
+    const updateParams = {
+      TableName: 'user-otp',
+      Key: { mobile },
+      UpdateExpression: 'set otp = :otp, otpExpireTime = :otpExpireTime',
+      ExpressionAttributeValues: {
+        ':otp': otp,
+        ':otpExpireTime': otpExpireTime,
+      },
+    };
+
+    await dynamoDB.update(updateParams).promise();
+
+    res.json({ message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error('DynamoDB or SNS Error:', error);
+    res.status(500).json({ error: 'Could not process login OTP' });
+  }
+});
+
+router.get('/verify-otp', async (req, res) => {
+  const { mobile, otp } = req.query;
+
+  // Check if mobile and OTP exist in Users table
+  const getParams = {
+    TableName: 'user-otp',
+    Key: { mobile },
+  };
+
+  try {
+    const result = await dynamoDB.get(getParams).promise();
+    const user = result.Item;
+
+    if (!user) {
+      return res.status(404).json({ error: 'User is not registered' });
+    }
+
+    if (user.otp !== otp) {
+      return res.status(401).json({ error: 'Invalid OTP' });
+    }
+
+    // Generate JWT token
+    const token = generateToken({ mobile });
+
+    res.json({ token });
+  } catch (error) {
+    console.error('DynamoDB Error:', error);
+    res.status(500).json({ error: 'Could not verify OTP' });
+  }
+})
+
+router.get('/verify-token', async (req, res) => {
+  const token = req.headers['authorization']?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    res.json({ message: 'Token is valid', decoded });
+  });
+});
+
+router.get('/logout', (req, res) => {
+  // Invalidate the token by removing it from the client side
+  res.json({ message: 'Logged out successfully' });
+});
+
+
+
 module.exports = router;
-
-
-
-//  curl -X POST http://localhost:4000/auth/register   -H "Content-Type: applicatio
-// n/json"   -d '{"email": "testuser@example.com", "password": "Test@1234"}'
