@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { generateToken } = require('../utils/jwt');
+const { createUserInfo } = require('../utils/authUtils');
 const AWS = require('aws-sdk');
 
 // Set AWS region
@@ -96,7 +97,6 @@ router.post('/login-otp', async (req, res) => {
   console.log("login-otp triggered");
   const { mobile } = req.body;
 
-  // Check if mobile exists in Users table
   const getParams = {
     TableName: 'user-otp',
     Key: { mobile },
@@ -113,7 +113,7 @@ router.post('/login-otp', async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Calculate OTP expiration time (10 minutes from now) in IST
-    const otpExpireTime = new Date(Date.now() + 10 * 60 * 1000)
+    const otpExpireTime = new Date(Date.now() + process.env.OTP_EXPIRATION_TIME * 1000)
       .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
     // Send OTP using AWS SNS
@@ -204,13 +204,9 @@ router.get('/verify-otp', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = generateToken({ mobile });
-    const userInfo = Object.keys(user)
-      .filter(key => key !== 'otp' && key !== 'otpExpireTime')
-      .reduce((obj, key) => {
-        obj[key] = user[key];
-        return obj;
-      }, {});
+    const token = generateToken({ user });
+    const userInfo = createUserInfo(user);
+   
     res.json({ token,userInfo });
   } catch (error) {
     console.error('DynamoDB Error:', error);
@@ -229,8 +225,8 @@ router.get('/verify-token', async (req, res) => {
     if (err) {
       return res.status(401).json({ error: 'Invalid token' });
     }
-
-    res.json({isVerified : true, message: 'Token is valid', decoded });
+    const userInfo = createUserInfo(decoded.user);
+    res.json({isVerified : true, message: 'Token is valid', userInfo });
   });
 });
 
@@ -238,7 +234,6 @@ router.get('/logout', (req, res) => {
   // Invalidate the token by removing it from the client side
   res.json({ message: 'Logged out successfully' });
 });
-
 
 
 module.exports = router;
