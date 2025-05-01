@@ -65,6 +65,12 @@ router.post('/login', async (req, res) => {
 
 router.post('/signup-otp', async (req, res) => {
   const {name, mobile, email, } = req.body;
+
+    const getParams = {
+      TableName: 'user-otp',
+      Key:{ mobile },
+    }
+
     const params = {
       TableName: 'user-otp',
       Item: {
@@ -74,6 +80,10 @@ router.post('/signup-otp', async (req, res) => {
       },
     };
     try {
+      const isUserExists = await dynamoDB.get(getParams).promise();
+      if (isUserExists.Item) {
+        return res.status(409).json({ error: 'User already exists' });
+      }
       await dynamoDB.put(params).promise();
       res.json({ message: 'Signup successfully done' });
     } catch (error) {
