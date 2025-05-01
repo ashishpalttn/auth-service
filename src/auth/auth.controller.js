@@ -99,7 +99,7 @@ router.post('/login-otp', async (req, res) => {
   // Check if mobile exists in Users table
   const getParams = {
     TableName: 'user-otp',
-    Key: { mobile }, // Fixed typo: changed 'key' to 'Key'
+    Key: { mobile },
   };
 
   try {
@@ -130,7 +130,36 @@ router.post('/login-otp', async (req, res) => {
       console.log("SNS Response:", snsResponse); // Log SNS response
     } catch (snsError) {
       console.error("SNS Error:", snsError); // Log SNS error
-      return res.status(500).json({ error: 'Failed to send OTP' });
+      return res.status(500).json({ error: 'Failed to send OTP via SMS' });
+    }
+
+    // Send OTP via email if email exists
+    if (user.email) {
+      const ses = new AWS.SES();
+      const emailParams = {
+        Source: process.env.SES_EMAIL_SOURCE, // Set your verified SES email
+        Destination: {
+          ToAddresses: [user.email],
+        },
+        Message: {
+          Subject: {
+            Data: "Your Live Bazar OTP",
+          },
+          Body: {
+            Text: {
+              Data: `Your live bazar login OTP is- ${otp}`,
+            },
+          },
+        },
+      };
+
+      try {
+        const emailResponse = await ses.sendEmail(emailParams).promise();
+        console.log("Email Response:", emailResponse); // Log email response
+      } catch (emailError) {
+        console.error("Email Error:", emailError); // Log email error
+        return res.status(500).json({ error: 'Failed to send OTP via email' });
+      }
     }
 
     // Save OTP and expiration time in Users table
@@ -176,8 +205,13 @@ router.get('/verify-otp', async (req, res) => {
 
     // Generate JWT token
     const token = generateToken({ mobile });
-
-    res.json({ token });
+    const userInfo = Object.keys(user)
+      .filter(key => key !== 'otp' && key !== 'otpExpireTime')
+      .reduce((obj, key) => {
+        obj[key] = user[key];
+        return obj;
+      }, {});
+    res.json({ token,userInfo });
   } catch (error) {
     console.error('DynamoDB Error:', error);
     res.status(500).json({ error: 'Could not verify OTP' });
@@ -195,7 +229,8 @@ router.get('/verify-token', async (req, res) => {
     if (err) {
       return res.status(401).json({ error: 'Invalid token' });
     }
-    res.json({ message: 'Token is valid', decoded });
+
+    res.json({isVerified : true, message: 'Token is valid', decoded });
   });
 });
 
