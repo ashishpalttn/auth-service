@@ -128,7 +128,7 @@ router.post('/login-otp', async (req, res) => {
       const snsResponse = await sns.publish(snsParams).promise();
     } catch (snsError) {
       console.error("SNS Error:", snsError);
-      const responseObj = getFailureResponseObject('Failed to send OTP via SMS', "ERR_DATA_NOT_FOUND");
+      const responseObj = getErrorResponseObject();
       return res.status(500).json(responseObj);
     }
     if (user.email) {
@@ -154,7 +154,7 @@ router.post('/login-otp', async (req, res) => {
         const emailResponse = await ses.sendEmail(emailParams).promise();
       } catch (emailError) {
         console.error("Email Error:", emailError);
-        const responseObj = getFailureResponseObject('Failed to send OTP via email', "ERR_DATA_NOT_FOUND");
+        const responseObj = getErrorResponseObject();
         return res.status(500).json(responseObj);
       }
     }
