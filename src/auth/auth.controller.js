@@ -2,8 +2,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { generateToken } = require('../utils/jwt');
-const { createUserInfo } = require('../utils/authUtils');
+const { createUserInfo, blacklistToken, isTokenBlacklisted } = require('../utils/authUtils');
 const AWS = require('aws-sdk');
+const { getFailureResponseObject, getSuccessResponseObject, getErrorResponseObject } = require('../utils/util');
 
 // Set AWS region
 AWS.config.update({ region: process.env.AWS_REGION || 'ap-south-1' });
@@ -14,89 +15,93 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 router.post('/register', async (req, res) => {
   const { email, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
-    const params = {
-      TableName: 'Users',
-      Item: {
-        email,
-        password: hashedPassword,
-      },
-    };
-    try {
-      await dynamoDB.put(params).promise();
-      res.json({ message: 'Registered successfully done' });
-    } catch (error) {
-      console.error('DynamoDB Error:', error);
-      res.status(500).json({ error: 'Could not register user' });
-    }
+  const params = {
+    TableName: 'Users',
+    Item: {
+      email,
+      password: hashedPassword,
+    },
+  };
+  try {
+    await dynamoDB.put(params).promise();
+    const responseObj = getSuccessResponseObject("User is registered successfully", [req.body]);
+    res.json(responseObj);
+  } catch (error) {
+    console.error('DynamoDB Error:', error);
+    responseObj = getErrorResponseObject();
+    res.status(500).json(responseObj);
+  }
 });
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
-    // Retrieve user from DynamoDB
-    const params = {
-      TableName: 'Users',
-      Key: { email },
-    };
-
-
-    try {
-      const result = await dynamoDB.get(params).promise();
-      const user = result.Item;
-  
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-  
-      // Compare passwords
-      const match = await bcrypt.compare(password, user.password);
-      if (!match) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-  
-      // Generate JWT token
-      const token = generateToken({ email });
-      res.json({ token });
-    } catch (error) {
-      console.error('DynamoDB Error:', error);
-      res.status(500).json({ error: 'Could not log in user' });
+  const params = {
+    TableName: 'Users',
+    Key: { email },
+  };
+  try {
+    const result = await dynamoDB.get(params).promise();
+    const user = result.Item;
+    if (!user) {
+      const responseObj = getFailureResponseObject('User not found', "ERR_DATA_NOT_FOUND");
+      return res.status(401).json(responseObj);
     }
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      const responseObj = getFailureResponseObject('Invalid credentials', "ERR_DATA_NOT_FOUND");
+      return res.status(401).json(responseObj);
+    }
+    const token = generateToken({ email });
+    const userInfo = createUserInfo(user);
+    const responseObj = getSuccessResponseObject("User is logged in successfully", [{ token }, userInfo]);
+    res.json(responseObj);
+  } catch (error) {
+    console.error('DynamoDB Error:', error);
+    const responseObj = getErrorResponseObject();
+    res.status(500).json(responseObj);
+  }
 });
 
-
-
 router.post('/signup-otp', async (req, res) => {
-  const {name, mobile, email, } = req.body;
-
-    const getParams = {
-      TableName: 'user-otp',
-      Key:{ mobile },
+  const { name, mobile, email } = req.body;
+  if (!mobile && mobile.length < 10) {
+    const responseObj = getFailureResponseObject('Invelid mobile number', "ERR_DATA_NOT_FOUND");
+    return res.status(400).json(responseObj);
+  }
+  if (!name) {
+    const responseObj = getFailureResponseObject('name is required', "ERR_DATA_NOT_FOUND");
+    return res.status(400).json(responseObj);
+  }
+  const getParams = {
+    TableName: 'user-otp',
+    Key: { mobile },
+  };
+  const params = {
+    TableName: 'user-otp',
+    Item: {
+      name,
+      mobile,
+      email,
+    },
+  };
+  try {
+    const isUserExists = await dynamoDB.get(getParams).promise();
+    if (isUserExists.Item) {
+      const responseObj = getFailureResponseObject('User already exists', "ERR_DATA_NOT_FOUND");
+      return res.status(409).json(responseObj);
     }
-
-    const params = {
-      TableName: 'user-otp',
-      Item: {
-        name,
-        mobile,
-        email,  
-      },
-    };
-    try {
-      const isUserExists = await dynamoDB.get(getParams).promise();
-      if (isUserExists.Item) {
-        return res.status(409).json({ error: 'User already exists' });
-      }
-      await dynamoDB.put(params).promise();
-      res.json({ message: 'Signup successfully done' });
-    } catch (error) {
-      console.error('DynamoDB Error:', error);
-      res.status(500).json({ error: 'mobile no. is required' });
-    }
+    await dynamoDB.put(params).promise();
+    const responseObj = getSuccessResponseObject("User is registered successfully", [req.body]);
+    res.json(responseObj);
+  } catch (error) {
+    console.error('DynamoDB Error:', error);
+    const responseObj = getErrorResponseObject();
+    res.status(500).json(responseObj);
+  }
 });
 
 router.post('/login-otp', async (req, res) => {
-  console.log("login-otp triggered");
   const { mobile } = req.body;
-
   const getParams = {
     TableName: 'user-otp',
     Key: { mobile },
@@ -105,35 +110,27 @@ router.post('/login-otp', async (req, res) => {
   try {
     const result = await dynamoDB.get(getParams).promise();
     const user = result.Item;
-
     if (!user) {
-      return res.status(404).json({ error: 'User is not registered' });
+      const responseObj = getFailureResponseObject('User is not registered', "ERR_DATA_NOT_FOUND");
+      return res.status(404).json(responseObj);
     }
-    console.log("number is found", user);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Calculate OTP expiration time (10 minutes from now) in IST
     const otpExpireTime = new Date(Date.now() + process.env.OTP_EXPIRATION_TIME * 1000)
       .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-    // Send OTP using AWS SNS
     const sns = new AWS.SNS();
     const snsParams = {
       Message: `Your live bazar login OTP is- ${otp}`,
       PhoneNumber: `+91${mobile}`,
     };
 
-    console.log("SNS Params:", snsParams); // Log SNS parameters
-
     try {
       const snsResponse = await sns.publish(snsParams).promise();
-      console.log("SNS Response:", snsResponse); // Log SNS response
     } catch (snsError) {
-      console.error("SNS Error:", snsError); // Log SNS error
-      return res.status(500).json({ error: 'Failed to send OTP via SMS' });
+      console.error("SNS Error:", snsError);
+      const responseObj = getFailureResponseObject('Failed to send OTP via SMS', "ERR_DATA_NOT_FOUND");
+      return res.status(500).json(responseObj);
     }
-
-    // Send OTP via email if email exists
     if (user.email) {
       const ses = new AWS.SES();
       const emailParams = {
@@ -155,14 +152,13 @@ router.post('/login-otp', async (req, res) => {
 
       try {
         const emailResponse = await ses.sendEmail(emailParams).promise();
-        console.log("Email Response:", emailResponse); // Log email response
       } catch (emailError) {
-        console.error("Email Error:", emailError); // Log email error
-        return res.status(500).json({ error: 'Failed to send OTP via email' });
+        console.error("Email Error:", emailError);
+        const responseObj = getFailureResponseObject('Failed to send OTP via email', "ERR_DATA_NOT_FOUND");
+        return res.status(500).json(responseObj);
       }
     }
 
-    // Save OTP and expiration time in Users table
     const updateParams = {
       TableName: 'user-otp',
       Key: { mobile },
@@ -174,18 +170,19 @@ router.post('/login-otp', async (req, res) => {
     };
 
     await dynamoDB.update(updateParams).promise();
-
-    res.json({ message: 'OTP sent successfully' });
+    const responseObj = getSuccessResponseObject("OTP sent successfully", [req.body]);
+    res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB or SNS Error:', error);
-    res.status(500).json({ error: 'Could not process login OTP' });
+    const responseObj = getErrorResponseObject();
+    res.status(500).json(responseObj);
   }
 });
+
 
 router.get('/verify-otp', async (req, res) => {
   const { mobile, otp } = req.query;
 
-  // Check if mobile and OTP exist in Users table
   const getParams = {
     TableName: 'user-otp',
     Key: { mobile },
@@ -200,40 +197,54 @@ router.get('/verify-otp', async (req, res) => {
     }
 
     if (user.otp !== otp) {
-      return res.status(401).json({ error: 'Invalid OTP' });
+      const responseObj = getFailureResponseObject('Invalid OTP', "ERR_DATA_NOT_FOUND");
+      return res.status(401).json(responseObj);
     }
 
-    // Generate JWT token
     const token = generateToken({ user });
     const userInfo = createUserInfo(user);
-   
-    res.json({ token,userInfo });
+    const responseObj = getSuccessResponseObject("User is verified successfully", [{ token: token }, userInfo]);
+    res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
-    res.status(500).json({ error: 'Could not verify OTP' });
+    const responseObj = getErrorResponseObject();
+    res.status(500).json(responseObj);
   }
-})
+});
 
 router.get('/verify-token', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
+    const responseObj = getFailureResponseObject('No token provided', "ERR_DATA_NOT_FOUND");
+    return res.status(401).json(responseObj);
+  }
+
+  if (isTokenBlacklisted(token)) {
+    const responseObj = getFailureResponseObject('Token is blacklisted', "ERR_TOKEN_BLACKLISTED");
+    return res.status(401).json(responseObj);
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
-      return res.status(401).json({ error: 'Invalid token' });
+      const responseObj = getFailureResponseObject('Invalid token', "ERR_DATA_NOT_FOUND");
+      return res.status(401).json(responseObj);
     }
     const userInfo = createUserInfo(decoded.user);
-    res.json({isVerified : true, message: 'Token is valid', userInfo });
+    const responseObj = getSuccessResponseObject("Token is valid", [userInfo]);
+    res.json(responseObj);
   });
 });
 
-router.get('/logout', (req, res) => {
-  // Invalidate the token by removing it from the client side
-  res.json({ message: 'Logged out successfully' });
-});
+router.get('/logout-otp', (req, res) => {
 
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (token) {
+    blacklistToken(token);
+  }
+  res.clearCookie('token'); 
+  const responseObj = getSuccessResponseObject("User is logged out successfully", []);
+  res.json(responseObj);
+});
 
 module.exports = router;
