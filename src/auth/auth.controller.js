@@ -126,6 +126,7 @@ router.post('/login-otp', async (req, res) => {
 
     try {
       const snsResponse = await sns.publish(snsParams).promise();
+      console.log("Otp send success......., SNS Response:", snsResponse);
     } catch (snsError) {
       console.error("SNS Error:", snsError);
       const responseObj = getErrorResponseObject();
@@ -169,7 +170,7 @@ router.post('/login-otp', async (req, res) => {
       },
     };
 
-    await dynamoDB.update(updateParams).promise();
+    // await dynamoDB.update(updateParams).promise();
     const responseObj = getSuccessResponseObject("OTP sent successfully", [req.body]);
     res.json(responseObj);
   } catch (error) {
