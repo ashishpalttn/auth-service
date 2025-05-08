@@ -131,33 +131,33 @@ router.post('/login-otp', async (req, res) => {
       const responseObj = getErrorResponseObject();
       return res.status(500).json(responseObj);
     }
-    if (user.email) {
-      const ses = new AWS.SES();
-      const emailParams = {
-        Source: process.env.SES_EMAIL_SOURCE, // Set your verified SES email
-        Destination: {
-          ToAddresses: [user.email],
-        },
-        Message: {
-          Subject: {
-            Data: "Your Live Bazar OTP",
-          },
-          Body: {
-            Text: {
-              Data: `Your live bazar login OTP is- ${otp}`,
-            },
-          },
-        },
-      };
+    // if (user.email) {
+    //   const ses = new AWS.SES();
+    //   const emailParams = {
+    //     Source: process.env.SES_EMAIL_SOURCE, // Set your verified SES email
+    //     Destination: {
+    //       ToAddresses: [user.email],
+    //     },
+    //     Message: {
+    //       Subject: {
+    //         Data: "Your Live Bazar OTP",
+    //       },
+    //       Body: {
+    //         Text: {
+    //           Data: `Your live bazar login OTP is- ${otp}`,
+    //         },
+    //       },
+    //     },
+    //   };
 
-      try {
-        const emailResponse = await ses.sendEmail(emailParams).promise();
-      } catch (emailError) {
-        console.error("Email Error:", emailError);
-        const responseObj = getErrorResponseObject();
-        return res.status(500).json(responseObj);
-      }
-    }
+    //   try {
+    //     const emailResponse = await ses.sendEmail(emailParams).promise();
+    //   } catch (emailError) {
+    //     console.error("Email Error:", emailError);
+    //     const responseObj = getErrorResponseObject();
+    //     return res.status(500).json(responseObj);
+    //   }
+    // }
 
     const updateParams = {
       TableName: 'user-otp',
