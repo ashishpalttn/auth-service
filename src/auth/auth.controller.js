@@ -204,7 +204,11 @@ router.get('/verify-otp', async (req, res) => {
 
     const token = generateToken({ user });
     const userInfo = createUserInfo(user);
-    const responseObj = getSuccessResponseObject("User is verified successfully", [{ token: token }, userInfo]);
+    const updatedUserInfo = {
+      ...userInfo,
+      token,
+    };
+    const responseObj = getSuccessResponseObject("User is verified successfully", [ updatedUserInfo ]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
