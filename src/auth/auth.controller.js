@@ -114,24 +114,27 @@ router.post('/login-otp', async (req, res) => {
       const responseObj = getFailureResponseObject('User is not registered', "ERR_DATA_NOT_FOUND");
       return res.status(404).json(responseObj);
     }
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const tempOtp = "0000"
     const otpExpireTime = new Date(Date.now() + process.env.OTP_EXPIRATION_TIME * 1000)
       .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-    const sns = new AWS.SNS();
-    const snsParams = {
-      Message: `Your live bazar login OTP is- ${otp}`,
-      PhoneNumber: `+91${mobile}`,
-    };
+    // const sns = new AWS.SNS();
+    // const snsParams = {
+    //   Message: `Your live bazar login OTP is- ${otp}`,
+    //   PhoneNumber: `+91${mobile}`,
+    // };
 
-    try {
-      const snsResponse = await sns.publish(snsParams).promise();
-      console.log("Otp send success......., SNS Response:", snsResponse);
-    } catch (snsError) {
-      console.error("SNS Error:", snsError);
-      const responseObj = getErrorResponseObject();
-      return res.status(500).json(responseObj);
-    }
+    // try {
+    //   const snsResponse = await sns.publish(snsParams).promise();
+    //   console.log("Otp send success......., SNS Response:", snsResponse);
+    // } catch (snsError) {
+    //   console.error("SNS Error:", snsError);
+    //   const responseObj = getErrorResponseObject();
+    //   return res.status(500).json(responseObj);
+    // }
+
+
     // if (user.email) {
     //   const ses = new AWS.SES();
     //   const emailParams = {
@@ -165,12 +168,12 @@ router.post('/login-otp', async (req, res) => {
       Key: { mobile },
       UpdateExpression: 'set otp = :otp, otpExpireTime = :otpExpireTime',
       ExpressionAttributeValues: {
-        ':otp': otp,
+        ':otp': tempOtp,
         ':otpExpireTime': otpExpireTime,
       },
     };
 
-    // await dynamoDB.update(updateParams).promise();
+    await dynamoDB.update(updateParams).promise();
     const responseObj = getSuccessResponseObject("OTP sent successfully", [req.body]);
     res.json(responseObj);
   } catch (error) {
