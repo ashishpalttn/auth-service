@@ -225,6 +225,7 @@ router.get('/verify-otp', async (req, res) => {
   }
 });
 
+
 router.get('/verify-token', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1];
 
@@ -244,7 +245,8 @@ router.get('/verify-token', async (req, res) => {
       return res.status(401).json(responseObj);
     }
     const userInfo = createUserInfo(decoded.user);
-    const responseObj = getSuccessResponseObject("Token is valid", [userInfo]);
+    const role = decoded.user?.role || 'CLIENT';
+    const responseObj = getSuccessResponseObject("Token is valid", [{ ...userInfo, role }]);
     res.json(responseObj);
   });
 });
