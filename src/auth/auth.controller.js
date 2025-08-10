@@ -12,66 +12,68 @@ AWS.config.update({ region: process.env.AWS_REGION || 'ap-south-1' });
 const router = express.Router();
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
-router.post('/register', async (req, res) => {
-  const { email, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const params = {
-    TableName: 'Users',
-    Item: {
-      email,
-      password: hashedPassword,
-    },
-  };
-  try {
-    await dynamoDB.put(params).promise();
-    const responseObj = getSuccessResponseObject("User is registered successfully", [req.body]);
-    res.json(responseObj);
-  } catch (error) {
-    console.error('DynamoDB Error:', error);
-    responseObj = getErrorResponseObject();
-    res.status(500).json(responseObj);
-  }
-});
+// router.post('/register', async (req, res) => {
+//   const { email, password } = req.body;
+//   const hashedPassword = await bcrypt.hash(password, 10);
+//   const params = {
+//     TableName: 'Users',
+//     Item: {
+//       email,
+//       password: hashedPassword,
+//     },
+//   };
+//   try {
+//     await dynamoDB.put(params).promise();
+//     const responseObj = getSuccessResponseObject("User is registered successfully", [req.body]);
+//     res.json(responseObj);
+//   } catch (error) {
+//     console.error('DynamoDB Error:', error);
+//     responseObj = getErrorResponseObject();
+//     res.status(500).json(responseObj);
+//   }
+// });
 
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  const params = {
-    TableName: 'Users',
-    Key: { email },
-  };
-  try {
-    const result = await dynamoDB.get(params).promise();
-    const user = result.Item;
-    if (!user) {
-      const responseObj = getFailureResponseObject('User not found', "ERR_DATA_NOT_FOUND");
-      return res.status(401).json(responseObj);
-    }
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      const responseObj = getFailureResponseObject('Invalid credentials', "ERR_DATA_NOT_FOUND");
-      return res.status(401).json(responseObj);
-    }
-    const token = generateToken({ email });
-    const userInfo = createUserInfo(user);
-    const responseObj = getSuccessResponseObject("User is logged in successfully", [{ token }, userInfo]);
-    res.json(responseObj);
-  } catch (error) {
-    console.error('DynamoDB Error:', error);
-    const responseObj = getErrorResponseObject();
-    res.status(500).json(responseObj);
-  }
-});
+// router.post('/login', async (req, res) => {
+//   const { email, password } = req.body;
+//   const params = {
+//     TableName: 'Users',
+//     Key: { email },
+//   };
+//   try {
+//     const result = await dynamoDB.get(params).promise();
+//     const user = result.Item;
+//     if (!user) {
+//       const responseObj = getFailureResponseObject('User not found', "ERR_DATA_NOT_FOUND");
+//       return res.status(401).json(responseObj);
+//     }
+//     const match = await bcrypt.compare(password, user.password);
+//     if (!match) {
+//       const responseObj = getFailureResponseObject('Invalid credentials', "ERR_DATA_NOT_FOUND");
+//       return res.status(401).json(responseObj);
+//     }
+//     const token = generateToken({ email });
+//     const userInfo = createUserInfo(user);
+//     const responseObj = getSuccessResponseObject("User is logged in successfully", [{ token }, userInfo]);
+//     res.json(responseObj);
+//   } catch (error) {
+//     console.error('DynamoDB Error:', error);
+//     const responseObj = getErrorResponseObject();
+//     res.status(500).json(responseObj);
+//   }
+// });
+
 
 router.post('/signup-otp', async (req, res) => {
-  const { name, mobile, email } = req.body;
-  if (!mobile && mobile.length < 10) {
-    const responseObj = getFailureResponseObject('Invelid mobile number', "ERR_DATA_NOT_FOUND");
+  const { name, mobile, email, role } = req.body;
+  if (!mobile || mobile.length < 10) {
+    const responseObj = getFailureResponseObject('Invalid mobile number', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
   if (!name) {
     const responseObj = getFailureResponseObject('name is required', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
+  const userRole = role === 'VENDOR' ? 'VENDOR' : 'CLIENT';
   const getParams = {
     TableName: 'user-otp',
     Key: { mobile },
@@ -82,6 +84,7 @@ router.post('/signup-otp', async (req, res) => {
       name,
       mobile,
       email,
+      role: userRole,
     },
   };
   try {
@@ -91,7 +94,7 @@ router.post('/signup-otp', async (req, res) => {
       return res.status(409).json(responseObj);
     }
     await dynamoDB.put(params).promise();
-    const responseObj = getSuccessResponseObject("User is registered successfully", [req.body]);
+    const responseObj = getSuccessResponseObject("User is registered successfully", [{ ...req.body, role: userRole }]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
@@ -184,6 +187,7 @@ router.post('/login-otp', async (req, res) => {
 });
 
 
+
 router.get('/verify-otp', async (req, res) => {
   const { mobile, otp } = req.query;
 
@@ -210,6 +214,7 @@ router.get('/verify-otp', async (req, res) => {
     const updatedUserInfo = {
       ...userInfo,
       token,
+      role: user.role || 'CLIENT',
     };
     const responseObj = getSuccessResponseObject("User is verified successfully", [ updatedUserInfo ]);
     res.json(responseObj);
