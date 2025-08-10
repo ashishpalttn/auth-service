@@ -12,18 +12,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// Health check route
-app.get("/", (req, res) => {
-  res.send("✅ Lambda is working 🚀");
-});
+// app.get("/default", (req, res) => {
+//     res.send("✅ default route check🚀");
+//   });
 
-app.get("/default", (req, res) => {
-    res.send("✅ default route check🚀");
-  });
-
-  app.get("/verify", (req, res) => {
-    res.send("✅ verify route check🚀");
-  });
+  // app.get("/verify", (req, res) => {
+  //   res.send("✅ verify route check🚀");
+  // });
 
 // Public routes
 app.use('/auth', authRoutes);
