@@ -64,8 +64,9 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 
 
+
 router.post('/signup-otp', async (req, res) => {
-  const { name, mobile, email, role } = req.body;
+  const { name, mobile, email, application } = req.body;
   if (!mobile || mobile.length < 10) {
     const responseObj = getFailureResponseObject('Invalid mobile number', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
@@ -74,7 +75,7 @@ router.post('/signup-otp', async (req, res) => {
     const responseObj = getFailureResponseObject('name is required', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
-  const userRole = role === 'VENDOR' ? 'VENDOR' : 'CLIENT';
+  const userApplication = application === 'VENDOR' ? 'VENDOR' : 'CLIENT';
   const getParams = {
     TableName: 'user-otp',
     Key: { mobile },
@@ -82,48 +83,48 @@ router.post('/signup-otp', async (req, res) => {
   try {
     const isUserExists = await dynamoDB.get(getParams).promise();
     if (isUserExists.Item) {
-      // User exists, check roles
-      let roles = isUserExists.Item.roles || [];
+      // User exists, check applications
+      let applications = isUserExists.Item.applications || isUserExists.Item.roles || [];
       // For backward compatibility, check if single role exists
-      if (isUserExists.Item.role && !roles.includes(isUserExists.Item.role)) {
-        roles.push(isUserExists.Item.role);
+      if (isUserExists.Item.role && !applications.includes(isUserExists.Item.role)) {
+        applications.push(isUserExists.Item.role);
       }
-      if (roles.includes(userRole)) {
-        const responseObj = getFailureResponseObject('User already exists with this role', "ERR_DATA_NOT_FOUND");
+      if (applications.includes(userApplication)) {
+        const responseObj = getFailureResponseObject('User already exists with this application', "ERR_DATA_NOT_FOUND");
         return res.status(409).json(responseObj);
       }
-      // Add new role to roles array
-      roles.push(userRole);
+      // Add new application to applications array
+      applications.push(userApplication);
       const updateParams = {
         TableName: 'user-otp',
         Key: { mobile },
-        UpdateExpression: 'set #name = :name, email = :email, #roles = :roles',
+        UpdateExpression: 'set #name = :name, email = :email, #applications = :applications',
         ExpressionAttributeNames: {
           '#name': 'name',
-          '#roles': 'roles',
+          '#applications': 'applications',
         },
         ExpressionAttributeValues: {
           ':name': name,
           ':email': email,
-          ':roles': roles,
+          ':applications': applications,
         },
       };
       await dynamoDB.update(updateParams).promise();
-      const responseObj = getSuccessResponseObject("Role added successfully", [{ mobile, name, email, roles }]);
+      const responseObj = getSuccessResponseObject("Application added successfully", [{ mobile, name, email, applications }]);
       return res.json(responseObj);
     }
-    // User does not exist, create with single role
+    // User does not exist, create with single application
     const params = {
       TableName: 'user-otp',
       Item: {
         name,
         mobile,
         email,
-        roles: [userRole],
+        applications: [userApplication],
       },
     };
     await dynamoDB.put(params).promise();
-    const responseObj = getSuccessResponseObject("User is registered successfully", [{ ...req.body, roles: [userRole] }]);
+    const responseObj = getSuccessResponseObject("User is registered successfully", [{ ...req.body, applications: [userApplication] }]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
@@ -242,11 +243,11 @@ router.get('/verify-otp', async (req, res) => {
     const token = generateToken({ user });
     const userInfo = createUserInfo(user);
     // Remove 'role' property if present
-    const { role, ...userInfoWithoutRole } = userInfo;
+    const { role, roles, ...userInfoWithoutRole } = userInfo;
     const updatedUserInfo = {
       ...userInfoWithoutRole,
       token,
-      roles: user.roles || (user.role ? [user.role] : ['CLIENT']),
+      applications: user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']),
     };
     const responseObj = getSuccessResponseObject("User is verified successfully", [ updatedUserInfo ]);
     res.json(responseObj);
@@ -278,10 +279,10 @@ router.get('/verify-token', async (req, res) => {
       return res.status(401).json(responseObj);
     }
     const userInfo = createUserInfo(decoded.user);
-    // Remove 'role' property if present
-    const { role, ...userInfoWithoutRole } = userInfo;
-    const roles = decoded.user?.roles || (decoded.user?.role ? [decoded.user.role] : ['CLIENT']);
-    const responseObj = getSuccessResponseObject("Token is valid", [{ ...userInfoWithoutRole, roles }]);
+    // Remove 'role' and 'roles' property if present
+    const { role, roles, ...userInfoWithoutRole } = userInfo;
+    const applications = decoded.user?.applications || decoded.user?.roles || (decoded.user?.role ? [decoded.user.role] : ['CLIENT']);
+    const responseObj = getSuccessResponseObject("Token is valid", [{ ...userInfoWithoutRole, applications }]);
     res.json(responseObj);
   });
 });
