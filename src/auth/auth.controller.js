@@ -63,6 +63,7 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 // });
 
 
+
 router.post('/signup-otp', async (req, res) => {
   const { name, mobile, email, role } = req.body;
   if (!mobile || mobile.length < 10) {
@@ -78,23 +79,51 @@ router.post('/signup-otp', async (req, res) => {
     TableName: 'user-otp',
     Key: { mobile },
   };
-  const params = {
-    TableName: 'user-otp',
-    Item: {
-      name,
-      mobile,
-      email,
-      role: userRole,
-    },
-  };
   try {
     const isUserExists = await dynamoDB.get(getParams).promise();
     if (isUserExists.Item) {
-      const responseObj = getFailureResponseObject('User already exists', "ERR_DATA_NOT_FOUND");
-      return res.status(409).json(responseObj);
+      // User exists, check roles
+      let roles = isUserExists.Item.roles || [];
+      // For backward compatibility, check if single role exists
+      if (isUserExists.Item.role && !roles.includes(isUserExists.Item.role)) {
+        roles.push(isUserExists.Item.role);
+      }
+      if (roles.includes(userRole)) {
+        const responseObj = getFailureResponseObject('User already exists with this role', "ERR_DATA_NOT_FOUND");
+        return res.status(409).json(responseObj);
+      }
+      // Add new role to roles array
+      roles.push(userRole);
+      const updateParams = {
+        TableName: 'user-otp',
+        Key: { mobile },
+        UpdateExpression: 'set #name = :name, email = :email, #roles = :roles',
+        ExpressionAttributeNames: {
+          '#name': 'name',
+          '#roles': 'roles',
+        },
+        ExpressionAttributeValues: {
+          ':name': name,
+          ':email': email,
+          ':roles': roles,
+        },
+      };
+      await dynamoDB.update(updateParams).promise();
+      const responseObj = getSuccessResponseObject("Role added successfully", [{ mobile, name, email, roles }]);
+      return res.json(responseObj);
     }
+    // User does not exist, create with single role
+    const params = {
+      TableName: 'user-otp',
+      Item: {
+        name,
+        mobile,
+        email,
+        roles: [userRole],
+      },
+    };
     await dynamoDB.put(params).promise();
-    const responseObj = getSuccessResponseObject("User is registered successfully", [{ ...req.body, role: userRole }]);
+    const responseObj = getSuccessResponseObject("User is registered successfully", [{ ...req.body, roles: [userRole] }]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
@@ -188,6 +217,7 @@ router.post('/login-otp', async (req, res) => {
 
 
 
+
 router.get('/verify-otp', async (req, res) => {
   const { mobile, otp } = req.query;
 
@@ -211,10 +241,12 @@ router.get('/verify-otp', async (req, res) => {
 
     const token = generateToken({ user });
     const userInfo = createUserInfo(user);
+    // Remove 'role' property if present
+    const { role, ...userInfoWithoutRole } = userInfo;
     const updatedUserInfo = {
-      ...userInfo,
+      ...userInfoWithoutRole,
       token,
-      role: user.role || 'CLIENT',
+      roles: user.roles || (user.role ? [user.role] : ['CLIENT']),
     };
     const responseObj = getSuccessResponseObject("User is verified successfully", [ updatedUserInfo ]);
     res.json(responseObj);
@@ -224,6 +256,7 @@ router.get('/verify-otp', async (req, res) => {
     res.status(500).json(responseObj);
   }
 });
+
 
 
 router.get('/verify-token', async (req, res) => {
@@ -245,8 +278,10 @@ router.get('/verify-token', async (req, res) => {
       return res.status(401).json(responseObj);
     }
     const userInfo = createUserInfo(decoded.user);
-    const role = decoded.user?.role || 'CLIENT';
-    const responseObj = getSuccessResponseObject("Token is valid", [{ ...userInfo, role }]);
+    // Remove 'role' property if present
+    const { role, ...userInfoWithoutRole } = userInfo;
+    const roles = decoded.user?.roles || (decoded.user?.role ? [decoded.user.role] : ['CLIENT']);
+    const responseObj = getSuccessResponseObject("Token is valid", [{ ...userInfoWithoutRole, roles }]);
     res.json(responseObj);
   });
 });
