@@ -133,8 +133,9 @@ router.post('/signup-otp', async (req, res) => {
   }
 });
 
+
 router.post('/login-otp', async (req, res) => {
-  const { mobile } = req.body;
+  const { mobile, application } = req.body;
   const getParams = {
     TableName: 'user-otp',
     Key: { mobile },
@@ -147,54 +148,18 @@ router.post('/login-otp', async (req, res) => {
       const responseObj = getFailureResponseObject('User is not registered', "ERR_DATA_NOT_FOUND");
       return res.status(404).json(responseObj);
     }
+    // Check if application exists for user
+    const applications = user.applications || user.roles || (user.role ? [user.role] : []);
+    if (!applications.includes(application)) {
+      const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
+      return res.status(404).json(responseObj);
+    }
     // const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const tempOtp = "0000"
     const otpExpireTime = new Date(Date.now() + process.env.OTP_EXPIRATION_TIME * 1000)
       .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-    // const sns = new AWS.SNS();
-    // const snsParams = {
-    //   Message: `Your live bazar login OTP is- ${otp}`,
-    //   PhoneNumber: `+91${mobile}`,
-    // };
-
-    // try {
-    //   const snsResponse = await sns.publish(snsParams).promise();
-    //   console.log("Otp send success......., SNS Response:", snsResponse);
-    // } catch (snsError) {
-    //   console.error("SNS Error:", snsError);
-    //   const responseObj = getErrorResponseObject();
-    //   return res.status(500).json(responseObj);
-    // }
-
-
-    // if (user.email) {
-    //   const ses = new AWS.SES();
-    //   const emailParams = {
-    //     Source: process.env.SES_EMAIL_SOURCE, // Set your verified SES email
-    //     Destination: {
-    //       ToAddresses: [user.email],
-    //     },
-    //     Message: {
-    //       Subject: {
-    //         Data: "Your Live Bazar OTP",
-    //       },
-    //       Body: {
-    //         Text: {
-    //           Data: `Your live bazar login OTP is- ${otp}`,
-    //         },
-    //       },
-    //     },
-    //   };
-
-    //   try {
-    //     const emailResponse = await ses.sendEmail(emailParams).promise();
-    //   } catch (emailError) {
-    //     console.error("Email Error:", emailError);
-    //     const responseObj = getErrorResponseObject();
-    //     return res.status(500).json(responseObj);
-    //   }
-    // }
+    // ...existing code for SNS/SES (commented out)
 
     const updateParams = {
       TableName: 'user-otp',
