@@ -28,4 +28,29 @@ const getErrorResponseObject = () => {
     return RESPONSE_OBJECT;
 }
 
-module.exports = { RESPONSE_OBJECT,getSuccessResponseObject,getFailureResponseObject ,getErrorResponseObject }; 
+// Generic response property selectors
+function getClientResponse(user, properties = ['name', 'mobile']) {
+    // Return only specified properties for CLIENT
+    if (!user || !properties || !Array.isArray(properties)) return {};
+    return properties.reduce((obj, key) => {
+        if (user.hasOwnProperty(key)) {
+            obj[key] = user[key];
+        }
+        return obj;
+    }, {});
+}
+
+function getVendorResponse(user) {
+    // Return all properties for VENDOR, but you can customize here
+    // For now, return the whole user object
+    return { ...user };
+}
+
+module.exports = {
+    RESPONSE_OBJECT,
+    getSuccessResponseObject,
+    getFailureResponseObject,
+    getErrorResponseObject,
+    getClientResponse,
+    getVendorResponse
+};

@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { generateToken } = require('../utils/jwt');
 const { createUserInfo, blacklistToken, isTokenBlacklisted } = require('../utils/authUtils');
 const AWS = require('aws-sdk');
-const { getFailureResponseObject, getSuccessResponseObject, getErrorResponseObject } = require('../utils/util');
+const { getFailureResponseObject, getSuccessResponseObject, getErrorResponseObject, getClientResponse, getVendorResponse } = require('../utils/util');
 
 // Set AWS region
 AWS.config.update({ region: process.env.AWS_REGION || 'ap-south-1' });
@@ -65,8 +65,23 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 
 
+
 router.post('/signup-otp', async (req, res) => {
-  const { name, mobile, email, application } = req.body;
+  const {
+    application,
+    name,
+    mobile,
+    category,
+    subCetegory,
+    shopName,
+    shopOwnerName,
+    address,
+    location,
+    email,
+    isGst,
+    ...rest
+  } = req.body;
+
   if (!mobile || mobile.length < 10) {
     const responseObj = getFailureResponseObject('Invalid mobile number', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
@@ -95,36 +110,70 @@ router.post('/signup-otp', async (req, res) => {
       }
       // Add new application to applications array
       applications.push(userApplication);
+      // Only update name if provided, keep other fields unchanged
+      let updateExp = '#applications = :applications';
+      let updateFields = {
+        '#applications': 'applications'
+      };
+      let expAttrVals = {
+        ':applications': applications
+      };
+      if (name) {
+        updateFields['#name'] = 'name';
+        updateExp = '#name = :name, ' + updateExp;
+        expAttrVals[':name'] = name;
+      }
+      // Only add #location if location is being updated (not in this logic)
+
       const updateParams = {
         TableName: 'user-otp',
         Key: { mobile },
-        UpdateExpression: 'set #name = :name, email = :email, #applications = :applications',
-        ExpressionAttributeNames: {
-          '#name': 'name',
-          '#applications': 'applications',
-        },
-        ExpressionAttributeValues: {
-          ':name': name,
-          ':email': email,
-          ':applications': applications,
-        },
+        UpdateExpression: 'set ' + updateExp,
+        ExpressionAttributeNames: updateFields,
+        ExpressionAttributeValues: expAttrVals
       };
       await dynamoDB.update(updateParams).promise();
-      const responseObj = getSuccessResponseObject("Application added successfully", [{ mobile, name, email, applications }]);
+      // Compose response with updated applications and name, rest fields from DB
+      let updatedUser = { ...isUserExists.Item, applications };
+      if (name) {
+        updatedUser.name = name;
+      }
+      let responseData;
+      if (userApplication === 'CLIENT') {
+        responseData = getClientResponse(updatedUser);
+      } else {
+        responseData = getVendorResponse(updatedUser);
+      }
+      const responseObj = getSuccessResponseObject("Application added successfully", [responseData]);
       return res.json(responseObj);
     }
     // User does not exist, create with single application
+    const item = {
+      name,
+      mobile,
+      email,
+      applications: [userApplication],
+      category,
+      subCetegory,
+      shopName,
+      shopOwnerName,
+      address,
+      location,
+      isGst,
+      ...rest
+    };
     const params = {
       TableName: 'user-otp',
-      Item: {
-        name,
-        mobile,
-        email,
-        applications: [userApplication],
-      },
+      Item: item,
     };
     await dynamoDB.put(params).promise();
-    const responseObj = getSuccessResponseObject("User is registered successfully", [{ ...req.body, applications: [userApplication] }]);
+    let responseData;
+    if (userApplication === 'CLIENT') {
+      responseData = getClientResponse(item);
+    } else {
+      responseData = getVendorResponse(item);
+    }
+    const responseObj = getSuccessResponseObject("User is registered successfully", [responseData]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
@@ -155,7 +204,7 @@ router.post('/login-otp', async (req, res) => {
       return res.status(404).json(responseObj);
     }
     // const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const tempOtp = "0000"
+    const tempOtp = "000000"
     const otpExpireTime = new Date(Date.now() + process.env.OTP_EXPIRATION_TIME * 1000)
       .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
@@ -206,15 +255,16 @@ router.get('/verify-otp', async (req, res) => {
     }
 
     const token = generateToken({ user });
-    const userInfo = createUserInfo(user);
-    // Remove 'role' property if present
-    const { role, roles, ...userInfoWithoutRole } = userInfo;
-    const updatedUserInfo = {
-      ...userInfoWithoutRole,
-      token,
-      applications: user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']),
-    };
-    const responseObj = getSuccessResponseObject("User is verified successfully", [ updatedUserInfo ]);
+    const userApplication = (req.query.application === 'VENDOR') ? 'VENDOR' : 'CLIENT';
+    let responseData;
+    if (userApplication === 'CLIENT') {
+      responseData = getClientResponse(user);
+    } else {
+      responseData = getVendorResponse(user);
+    }
+    responseData.token = token;
+    responseData.applications = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
+    const responseObj = getSuccessResponseObject("User is verified successfully", [responseData]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
@@ -227,6 +277,7 @@ router.get('/verify-otp', async (req, res) => {
 
 router.get('/verify-token', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1];
+  const application = (req.query.application === 'VENDOR') ? 'VENDOR' : 'CLIENT';
 
   if (!token) {
     const responseObj = getFailureResponseObject('No token provided', "ERR_DATA_NOT_FOUND");
@@ -243,11 +294,15 @@ router.get('/verify-token', async (req, res) => {
       const responseObj = getFailureResponseObject('Invalid token', "ERR_DATA_NOT_FOUND");
       return res.status(401).json(responseObj);
     }
-    const userInfo = createUserInfo(decoded.user);
-    // Remove 'role' and 'roles' property if present
-    const { role, roles, ...userInfoWithoutRole } = userInfo;
-    const applications = decoded.user?.applications || decoded.user?.roles || (decoded.user?.role ? [decoded.user.role] : ['CLIENT']);
-    const responseObj = getSuccessResponseObject("Token is valid", [{ ...userInfoWithoutRole, applications }]);
+    const user = decoded.user;
+    let responseData;
+    if (application === 'CLIENT') {
+      responseData = getClientResponse(user, properties = ['name', 'mobile','otpExpireTime']);
+    } else {
+      responseData = getVendorResponse(user);
+    }
+    responseData.applications = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
+    const responseObj = getSuccessResponseObject("Token is valid", [responseData]);
     res.json(responseObj);
   });
 });
