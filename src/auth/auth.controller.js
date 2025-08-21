@@ -234,7 +234,7 @@ router.post('/login-otp', async (req, res) => {
 
 
 router.get('/verify-otp', async (req, res) => {
-  const { mobile, otp } = req.query;
+  const { mobile, otp, application } = req.query;
 
   const getParams = {
     TableName: 'user-otp',
@@ -254,16 +254,21 @@ router.get('/verify-otp', async (req, res) => {
       return res.status(401).json(responseObj);
     }
 
+    const userApplication = (application === 'VENDOR') ? 'VENDOR' : 'CLIENT';
+    const applicationsArr = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
+    if (!applicationsArr.includes(userApplication)) {
+      const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
+      return res.status(404).json(responseObj);
+    }
     const token = generateToken({ user });
-    const userApplication = (req.query.application === 'VENDOR') ? 'VENDOR' : 'CLIENT';
     let responseData;
     if (userApplication === 'CLIENT') {
-      responseData = getClientResponse(user);
+      responseData = getClientResponse(user, ['name', 'mobile', 'otpExpireTime']);
     } else {
       responseData = getVendorResponse(user);
     }
     responseData.token = token;
-    responseData.applications = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
+    responseData.applications = applicationsArr;
     const responseObj = getSuccessResponseObject("User is verified successfully", [responseData]);
     res.json(responseObj);
   } catch (error) {
