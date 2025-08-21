@@ -300,13 +300,18 @@ router.get('/verify-token', async (req, res) => {
       return res.status(401).json(responseObj);
     }
     const user = decoded.user;
+    const applicationsArr = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
+    if (!applicationsArr.includes(application)) {
+      const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
+      return res.status(404).json(responseObj);
+    }
     let responseData;
     if (application === 'CLIENT') {
-      responseData = getClientResponse(user, properties = ['name', 'mobile','otpExpireTime']);
+      responseData = getClientResponse(user, ['name', 'mobile','otpExpireTime']);
     } else {
       responseData = getVendorResponse(user);
     }
-    responseData.applications = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
+    responseData.applications = applicationsArr;
     const responseObj = getSuccessResponseObject("Token is valid", [responseData]);
     res.json(responseObj);
   });
