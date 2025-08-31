@@ -32,12 +32,19 @@ const getErrorResponseObject = () => {
 function getClientResponse(user, properties = ['name', 'mobile']) {
     // Return only specified properties for CLIENT
     if (!user || !properties || !Array.isArray(properties)) return {};
-    return properties.reduce((obj, key) => {
+     const responseObj = properties.reduce((obj, key) => {
         if (user.hasOwnProperty(key)) {
             obj[key] = user[key];
         }
         return obj;
     }, {});
+    if(user.name && user?.applications?.includes('CLIENT')){
+        responseObj.isRegistered = true;
+    }
+    else{
+        responseObj.isRegistered = false;
+    }
+    return responseObj;
 }
 
 function getVendorResponse(user, properties) {
@@ -47,6 +54,12 @@ function getVendorResponse(user, properties) {
     properties.forEach(key => {
         delete result[key];
     });
+    if(user.name && user?.applications?.includes('VENDOR')){
+        result.isRegistered = true;
+    }
+    else{
+        result.isRegistered = false;
+    }
     return result;
 }
 

@@ -92,7 +92,6 @@ router.post('/login-otp', async (req, res) => {
   }
 });
 
-
 router.get('/verify-otp', async (req, res) => {
   const { mobile, otp, application } = req.query;
 
@@ -133,6 +132,21 @@ router.get('/verify-otp', async (req, res) => {
       const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
       return res.status(404).json(responseObj);
     }
+    // Update otpVerified array in DB
+    let otpVerifiedArr = user.otpVerified || [];
+    if (!otpVerifiedArr.includes(userApplication)) {
+      otpVerifiedArr.push(userApplication);
+      const updateParams = {
+        TableName: 'user-otp',
+        Key: { mobile },
+        UpdateExpression: 'set otpVerified = :otpVerified',
+        ExpressionAttributeValues: {
+          ':otpVerified': otpVerifiedArr
+        }
+      };
+      await dynamoDB.update(updateParams).promise();
+    }
+
     const token = generateToken({ user });
     let responseData;
     if (userApplication === 'CLIENT') {
@@ -142,6 +156,7 @@ router.get('/verify-otp', async (req, res) => {
     }
     responseData.token = token;
     responseData.applications = applicationsArr;
+    responseData.otpVerified = otpVerifiedArr;
     if(user.name){
       responseData.isRegistered = true
     }
@@ -173,77 +188,47 @@ router.post('/signup-otp', async (req, res) => {
     ...rest
   } = req.body;
 
-  if (!mobile || mobile.length < 10) {
-    const responseObj = getFailureResponseObject('Invalid mobile number', "ERR_DATA_NOT_FOUND");
-    return res.status(400).json(responseObj);
+  // List of required fields based on application type
+  let requiredFields;
+  if (application === 'CLIENT') {
+    requiredFields = ['name', 'mobile'];
+  } else {
+    requiredFields = [
+      'application',
+      'name',
+      'mobile',
+      'category',
+      'subCetegory',
+      'shopName',
+      'shopOwnerName',
+      'address',
+      'location',
+      'email',
+      'isGst'
+    ];
   }
-  if (!name) {
-    const responseObj = getFailureResponseObject('name is required', "ERR_DATA_NOT_FOUND");
-    return res.status(400).json(responseObj);
-  }
-  const userApplication = application === 'VENDOR' ? 'VENDOR' : 'CLIENT';
-  const getParams = {
-    TableName: 'user-otp',
-    Key: { mobile },
-  };
-  try {
-    const isUserExists = await dynamoDB.get(getParams).promise();
-    if (isUserExists.Item) {
-      // User exists, check applications
-      let applications = isUserExists.Item.applications || isUserExists.Item.roles || [];
-      // For backward compatibility, check if single role exists
-      if (isUserExists.Item.role && !applications.includes(isUserExists.Item.role)) {
-        applications.push(isUserExists.Item.role);
-      }
-      if (applications.includes(userApplication)) {
-        const responseObj = getFailureResponseObject('User already exists with this application', "ERR_DATA_NOT_FOUND");
-        return res.status(409).json(responseObj);
-      }
-      // Add new application to applications array
-      applications.push(userApplication);
-      // Only update name if provided, keep other fields unchanged
-      let updateExp = '#applications = :applications';
-      let updateFields = {
-        '#applications': 'applications'
-      };
-      let expAttrVals = {
-        ':applications': applications
-      };
-      if (name) {
-        updateFields['#name'] = 'name';
-        updateExp = '#name = :name, ' + updateExp;
-        expAttrVals[':name'] = name;
-      }
-      // Only add #location if location is being updated (not in this logic)
-
-      const updateParams = {
-        TableName: 'user-otp',
-        Key: { mobile },
-        UpdateExpression: 'set ' + updateExp,
-        ExpressionAttributeNames: updateFields,
-        ExpressionAttributeValues: expAttrVals
-      };
-      await dynamoDB.update(updateParams).promise();
-      // Compose response with updated applications and name, rest fields from DB
-      let updatedUser = { ...isUserExists.Item, applications };
-      if (name) {
-        updatedUser.name = name;
-      }
-      let responseData;
-      if (userApplication === 'CLIENT') {
-        responseData = getClientResponse(updatedUser);
-      } else {
-        responseData = getVendorResponse(updatedUser);
-      }
-      const responseObj = getSuccessResponseObject("Application added successfully", [responseData]);
-      return res.json(responseObj);
+  // Find missing or empty fields
+  const missingFields = requiredFields.filter(field => {
+    if (field === 'mobile') {
+      return !mobile || mobile.length < 10;
     }
-    // User does not exist, create with single application
-    const item = {
+    return !req.body[field] && req.body[field] !== false && req.body[field] !== 0;
+  });
+  if (missingFields.length > 0) {
+    const responseObj = getFailureResponseObject(
+      `Missing or invalid fields: ${missingFields.join(', ')}`,
+      "ERR_DATA_NOT_FOUND"
+    );
+    return res.status(400).json(responseObj);
+  }
+  const userApplication = application
+
+  try {
+    // Always upsert (add/update) fields for the given mobile number
+    // Prepare update expression and attribute values
+    const updateFields = {
       name,
-      mobile,
       email,
-      applications: [userApplication],
       category,
       subCetegory,
       shopName,
@@ -253,18 +238,39 @@ router.post('/signup-otp', async (req, res) => {
       isGst,
       ...rest
     };
-    const params = {
+    let updateExpArr = [];
+    let expAttrVals = {};
+    let expAttrNames = {};
+    Object.keys(updateFields).forEach(key => {
+      if (updateFields[key] !== undefined) {
+        updateExpArr.push(`#${key} = :${key}`);
+        expAttrVals[`:${key}`] = updateFields[key];
+        expAttrNames[`#${key}`] = key;
+      }
+    });
+    const updateParams = {
       TableName: 'user-otp',
-      Item: item,
+      Key: { mobile },
+      UpdateExpression: 'set ' + updateExpArr.join(', '),
+      ExpressionAttributeNames: expAttrNames,
+      ExpressionAttributeValues: expAttrVals
     };
-    await dynamoDB.put(params).promise();
+    await dynamoDB.update(updateParams).promise();
+    const getParams = {
+      TableName: 'user-otp',
+      Key: { mobile },
+    };
+    const result = await dynamoDB.get(getParams).promise();
+    const user = result.Item;
+
     let responseData;
     if (userApplication === 'CLIENT') {
-      responseData = getClientResponse(item);
+      responseData = getClientResponse(user);
     } else {
-      responseData = getVendorResponse(item);
+      responseData = getVendorResponse(user,["temp"]);
     }
-    const responseObj = getSuccessResponseObject("User is registered successfully", [responseData]);
+
+    const responseObj = getSuccessResponseObject("User is registered/updated successfully", [responseData]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
