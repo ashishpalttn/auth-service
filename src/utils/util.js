@@ -40,10 +40,14 @@ function getClientResponse(user, properties = ['name', 'mobile']) {
     }, {});
 }
 
-function getVendorResponse(user) {
-    // Return all properties for VENDOR, but you can customize here
-    // For now, return the whole user object
-    return { ...user };
+function getVendorResponse(user, properties) {
+    // Remove only specified properties, keep the rest
+    if (!user || !Array.isArray(properties)) return {};
+    const result = { ...user };
+    properties.forEach(key => {
+        delete result[key];
+    });
+    return result;
 }
 
 module.exports = {
