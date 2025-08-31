@@ -63,9 +63,6 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 // });
 
 
-
-
-
 router.post('/signup-otp', async (req, res) => {
   const {
     application,
@@ -229,8 +226,6 @@ router.post('/login-otp', async (req, res) => {
     res.status(500).json(responseObj);
   }
 });
-
-
 
 
 router.get('/verify-otp', async (req, res) => {
