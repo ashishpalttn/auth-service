@@ -139,17 +139,24 @@ router.post('/login-otp', async (req, res) => {
 
   try {
     const result = await dynamoDB.get(getParams).promise();
-    const user = result.Item;
+    let user = result.Item;
+    const userApplication = application === 'VENDOR' ? 'VENDOR' : 'CLIENT';
+
     if (!user) {
-      const responseObj = getFailureResponseObject('User is not registered', "ERR_DATA_NOT_FOUND");
-      return res.status(404).json(responseObj);
+      // User not registered, create with mobile and application
+      const item = {
+        mobile,
+        applications: [userApplication]
+      };
+      const params = {
+        TableName: 'user-otp',
+        Item: item,
+      };
+      await dynamoDB.put(params).promise();
+      user = item;
     }
-    // Check if application exists for user
-    const applications = user.applications || user.roles || (user.role ? [user.role] : []);
-    if (!applications.includes(application)) {
-      const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
-      return res.status(404).json(responseObj);
-    }
+
+
     // const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const tempOtp = "000000"
     const otpExpireTime = new Date(Date.now() + process.env.OTP_EXPIRATION_TIME * 1000)
