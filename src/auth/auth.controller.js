@@ -12,56 +12,6 @@ AWS.config.update({ region: process.env.AWS_REGION || 'ap-south-1' });
 const router = express.Router();
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
-// router.post('/register', async (req, res) => {
-//   const { email, password } = req.body;
-//   const hashedPassword = await bcrypt.hash(password, 10);
-//   const params = {
-//     TableName: 'Users',
-//     Item: {
-//       email,
-//       password: hashedPassword,
-//     },
-//   };
-//   try {
-//     await dynamoDB.put(params).promise();
-//     const responseObj = getSuccessResponseObject("User is registered successfully", [req.body]);
-//     res.json(responseObj);
-//   } catch (error) {
-//     console.error('DynamoDB Error:', error);
-//     responseObj = getErrorResponseObject();
-//     res.status(500).json(responseObj);
-//   }
-// });
-
-// router.post('/login', async (req, res) => {
-//   const { email, password } = req.body;
-//   const params = {
-//     TableName: 'Users',
-//     Key: { email },
-//   };
-//   try {
-//     const result = await dynamoDB.get(params).promise();
-//     const user = result.Item;
-//     if (!user) {
-//       const responseObj = getFailureResponseObject('User not found', "ERR_DATA_NOT_FOUND");
-//       return res.status(401).json(responseObj);
-//     }
-//     const match = await bcrypt.compare(password, user.password);
-//     if (!match) {
-//       const responseObj = getFailureResponseObject('Invalid credentials', "ERR_DATA_NOT_FOUND");
-//       return res.status(401).json(responseObj);
-//     }
-//     const token = generateToken({ email });
-//     const userInfo = createUserInfo(user);
-//     const responseObj = getSuccessResponseObject("User is logged in successfully", [{ token }, userInfo]);
-//     res.json(responseObj);
-//   } catch (error) {
-//     console.error('DynamoDB Error:', error);
-//     const responseObj = getErrorResponseObject();
-//     res.status(500).json(responseObj);
-//   }
-// });
-
 
 router.post('/signup-otp', async (req, res) => {
   const {
