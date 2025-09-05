@@ -5,6 +5,7 @@ const { generateToken } = require('../utils/jwt');
 const { createUserInfo, blacklistToken, isTokenBlacklisted } = require('../utils/authUtils');
 const AWS = require('aws-sdk');
 const { getFailureResponseObject, getSuccessResponseObject, getErrorResponseObject, getClientResponse, getVendorResponse } = require('../utils/util');
+const { v4: uuidv4 } = require('uuid');
 
 // Set AWS region
 AWS.config.update({ region: process.env.AWS_REGION || 'ap-south-1' });
@@ -14,29 +15,30 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 
 router.post('/login-otp', async (req, res) => {
-  const { mobile, application } = req.body;
-  if (!application) {
-    const responseObj = getFailureResponseObject('Please send app name', "ERR_DATA_NOT_FOUND");
+  const { mobileNumber, appType } = req.body;
+  if (!appType) {
+    const responseObj = getFailureResponseObject('Please send appType', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
-    if (!mobile) {
+    if (!mobileNumber) {
     const responseObj = getFailureResponseObject('Please send mobile number', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
   const getParams = {
     TableName: 'user-otp',
-    Key: { mobile },
+    Key: { mobileNumber },
   };
 
   try {
     const result = await dynamoDB.get(getParams).promise();
     let user = result.Item;
-    const userApplication = application === 'VENDOR' ? 'VENDOR' : 'CLIENT';
+    const userApplication = appType;
 
     if (!user) {
-      // User not registered, create with mobile and application
+      // User not registered, create with mobileNumber and appType
       const item = {
-        mobile,
+        user_id: uuidv4(),
+        mobileNumber,
         applications: [userApplication]
       };
       const params = {
@@ -46,7 +48,7 @@ router.post('/login-otp', async (req, res) => {
       await dynamoDB.put(params).promise();
       user = item;
     } else {
-      // User exists, check if application is present
+      // User exists, check if appType is present
       let applications = user.applications || [];
   
       if (!applications.includes(userApplication)) {
@@ -54,7 +56,7 @@ router.post('/login-otp', async (req, res) => {
         // Update applications array in DB
         const updateAppParams = {
           TableName: 'user-otp',
-          Key: { mobile },
+          Key: { mobileNumber },
           UpdateExpression: 'set applications = :applications',
           ExpressionAttributeValues: {
             ':applications': applications
@@ -74,7 +76,7 @@ router.post('/login-otp', async (req, res) => {
 
     const updateParams = {
       TableName: 'user-otp',
-      Key: { mobile },
+      Key: { mobileNumber },
       UpdateExpression: 'set otp = :otp, otpExpireTime = :otpExpireTime',
       ExpressionAttributeValues: {
         ':otp': tempOtp,
@@ -93,13 +95,13 @@ router.post('/login-otp', async (req, res) => {
 });
 
 router.get('/verify-otp', async (req, res) => {
-  const { mobile, otp, application } = req.query;
+  const { mobileNumber, otp, appType } = req.query;
 
-  if (!application) {
-    const responseObj = getFailureResponseObject('Please send app name', "ERR_DATA_NOT_FOUND");
+  if (!appType) {
+    const responseObj = getFailureResponseObject('Please send appType', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
-    if (!mobile) {
+    if (!mobileNumber) {
     const responseObj = getFailureResponseObject('Please send mobile number', "ERR_DATA_NOT_FOUND");
     return res.status(400).json(responseObj);
   }
@@ -110,7 +112,7 @@ router.get('/verify-otp', async (req, res) => {
 
   const getParams = {
     TableName: 'user-otp',
-    Key: { mobile },
+    Key: { mobileNumber },
   };
 
   try {
@@ -126,10 +128,10 @@ router.get('/verify-otp', async (req, res) => {
       return res.status(401).json(responseObj);
     }
 
-    const userApplication = application;
+    const userApplication = appType;
     const applicationsArr = user.applications;
     if (!applicationsArr.includes(userApplication)) {
-      const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
+      const responseObj = getFailureResponseObject('OTP validated', "ERR_DATA_NOT_FOUND");
       return res.status(404).json(responseObj);
     }
     // Update otpVerified array in DB
@@ -138,7 +140,7 @@ router.get('/verify-otp', async (req, res) => {
       otpVerifiedArr.push(userApplication);
       const updateParams = {
         TableName: 'user-otp',
-        Key: { mobile },
+        Key: { mobileNumber },
         UpdateExpression: 'set otpVerified = :otpVerified',
         ExpressionAttributeValues: {
           ':otpVerified': otpVerifiedArr
@@ -150,9 +152,9 @@ router.get('/verify-otp', async (req, res) => {
     const token = generateToken({ user });
     let responseData;
     if (userApplication === 'CLIENT') {
-      responseData = getClientResponse(user, ['name', 'mobile']);   
+      responseData = getClientResponse(user, ['name', 'mobileNumber']);   
     } else {
-      responseData = getVendorResponse(user, ['otpExpireTime','otp'] );
+      responseData = getVendorResponse(user, ['location, otpExpireTime','otp'] );
     }
     responseData.token = token;
     responseData.applications = applicationsArr;
@@ -174,9 +176,10 @@ router.get('/verify-otp', async (req, res) => {
 
 router.post('/signup-otp', async (req, res) => {
   const {
-    application,
+    user_id,
+    appType,
     name,
-    mobile,
+    mobileNumber,
     category,
     subCetegory,
     shopName,
@@ -190,13 +193,13 @@ router.post('/signup-otp', async (req, res) => {
 
   // List of required fields based on application type
   let requiredFields;
-  if (application === 'CLIENT') {
-    requiredFields = ['name', 'mobile'];
+  if (appType === 'CLIENT') {
+    requiredFields = ['name', 'mobileNumber'];
   } else {
     requiredFields = [
-      'application',
+      'appType',
       'name',
-      'mobile',
+      'mobileNumber',
       'category',
       'subCetegory',
       'shopName',
@@ -209,8 +212,8 @@ router.post('/signup-otp', async (req, res) => {
   }
   // Find missing or empty fields
   const missingFields = requiredFields.filter(field => {
-    if (field === 'mobile') {
-      return !mobile || mobile.length < 10;
+    if (field === 'mobileNumber') {
+      return !mobileNumber || mobileNumber.length < 10;
     }
     return !req.body[field] && req.body[field] !== false && req.body[field] !== 0;
   });
@@ -221,7 +224,7 @@ router.post('/signup-otp', async (req, res) => {
     );
     return res.status(400).json(responseObj);
   }
-  const userApplication = application
+  const userApplication = appType
 
   try {
     // Always upsert (add/update) fields for the given mobile number
@@ -235,6 +238,7 @@ router.post('/signup-otp', async (req, res) => {
       shopOwnerName,
       address,
       location,
+      isRegistered:true,
       isGst,
       ...rest
     };
@@ -250,7 +254,7 @@ router.post('/signup-otp', async (req, res) => {
     });
     const updateParams = {
       TableName: 'user-otp',
-      Key: { mobile },
+      Key: { mobileNumber },
       UpdateExpression: 'set ' + updateExpArr.join(', '),
       ExpressionAttributeNames: expAttrNames,
       ExpressionAttributeValues: expAttrVals
@@ -258,7 +262,7 @@ router.post('/signup-otp', async (req, res) => {
     await dynamoDB.update(updateParams).promise();
     const getParams = {
       TableName: 'user-otp',
-      Key: { mobile },
+      Key: { mobileNumber },
     };
     const result = await dynamoDB.get(getParams).promise();
     const user = result.Item;
@@ -267,7 +271,7 @@ router.post('/signup-otp', async (req, res) => {
     if (userApplication === 'CLIENT') {
       responseData = getClientResponse(user);
     } else {
-      responseData = getVendorResponse(user,["temp"]);
+      responseData = getVendorResponse(user,["location"]);//in arr pass what you want hide in response
     }
 
     const responseObj = getSuccessResponseObject("User is registered/updated successfully", [responseData]);
@@ -281,7 +285,7 @@ router.post('/signup-otp', async (req, res) => {
 
 router.get('/verify-token', async (req, res) => {
   const token = req.headers['authorization']?.split(' ')[1];
-  const application = (req.query.application === 'VENDOR') ? 'VENDOR' : 'CLIENT';
+  const appType = req.query.appType;
 
   if (!token) {
     const responseObj = getFailureResponseObject('No token provided', "ERR_DATA_NOT_FOUND");
@@ -299,14 +303,14 @@ router.get('/verify-token', async (req, res) => {
       return res.status(401).json(responseObj);
     }
     const user = decoded.user;
-    const applicationsArr = user.applications || user.roles || (user.role ? [user.role] : ['CLIENT']);
-    if (!applicationsArr.includes(application)) {
+    const applicationsArr = user.applications;
+    if (!applicationsArr.includes(appType)) {
       const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
       return res.status(404).json(responseObj);
     }
     let responseData;
-    if (application === 'CLIENT') {
-      responseData = getClientResponse(user, ['name', 'mobile','otpExpireTime']);
+    if (appType === 'CLIENT') {
+      responseData = getClientResponse(user, ['name', 'mobileNumber','otpExpireTime']);
     } else {
       responseData = getVendorResponse(user);
     }
