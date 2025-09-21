@@ -206,7 +206,6 @@ router.post('/signup-otp', async (req, res) => {
       'shopOwnerName',
       'address',
       'location',
-      'email',
       'isGst'
     ];
   }

@@ -1,3 +1,10 @@
+### Local Development
+Start the server locally:
+```bash
+npm run start
+```
+The service will run on `http://localhost:3000` (or your configured port).
+
 
 # Auth Service
 
@@ -44,15 +51,6 @@ lambda.js                 # AWS Lambda handler
    AWS_REGION=your_aws_region
    # Add other variables as needed
    ```
-
-## Usage
-
-### Local Development
-Start the server locally:
-```bash
-npm start
-```
-The service will run on `http://localhost:3000` (or your configured port).
 
 ### AWS Lambda Deployment
 The service is compatible with AWS Lambda using `@vendia/serverless-express`. Deploy `lambda.js` as your Lambda handler.
