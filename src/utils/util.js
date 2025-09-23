@@ -47,7 +47,7 @@ function getClientResponse(user, properties = ['name', 'mobile']) {
     return responseObj;
 }
 
-function getVendorResponse(user, properties) {
+function getVendorResponse(user, properties=['location', 'otpExpireTime','otp']) {
     // Remove only specified properties, keep the rest
     if (!user || !Array.isArray(properties)) return {};
     const result = { ...user };

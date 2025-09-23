@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { authenticateJWT } = require('./auth.middleware');
 const { generateToken } = require('../utils/jwt');
 const { createUserInfo, blacklistToken, isTokenBlacklisted } = require('../utils/authUtils');
 const AWS = require('aws-sdk');
@@ -154,7 +155,7 @@ router.get('/verify-otp', async (req, res) => {
     if (userApplication === 'CLIENT') {
       responseData = getClientResponse(user, ['name', 'mobileNumber']);   
     } else {
-      responseData = getVendorResponse(user, ['location, otpExpireTime','otp'] );
+      responseData = getVendorResponse(user, ['location', 'otpExpireTime','otp'] );
     }
     responseData.token = token;
     responseData.applications = applicationsArr;
@@ -282,41 +283,28 @@ router.post('/signup-otp', async (req, res) => {
   }
 });
 
-router.get('/verify-token', async (req, res) => {
-  const token = req.headers['authorization']?.split(' ')[1];
+router.get('/verify-token', authenticateJWT, (req, res) => {
   const appType = req.query.appType;
-
-  if (!token) {
-    const responseObj = getFailureResponseObject('No token provided', "ERR_DATA_NOT_FOUND");
+  if (!appType) {
+    const responseObj = getFailureResponseObject('Please send the app type', "ERR_DATA_NOT_FOUND");
     return res.status(401).json(responseObj);
   }
-
-  if (isTokenBlacklisted(token)) {
-    const responseObj = getFailureResponseObject('Token is blacklisted', "ERR_TOKEN_BLACKLISTED");
-    return res.status(401).json(responseObj);
+  const user = req.user.user || req.user; // support both {user} and direct user
+  const applicationsArr = user.applications;
+  if (!applicationsArr || !applicationsArr.includes(appType)) {
+    const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
+    return res.status(404).json(responseObj);
   }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      const responseObj = getFailureResponseObject('Invalid token', "ERR_DATA_NOT_FOUND");
-      return res.status(401).json(responseObj);
-    }
-    const user = decoded.user;
-    const applicationsArr = user.applications;
-    if (!applicationsArr.includes(appType)) {
-      const responseObj = getFailureResponseObject('User is not registered for this application', "ERR_DATA_NOT_FOUND");
-      return res.status(404).json(responseObj);
-    }
-    let responseData;
-    if (appType === 'CLIENT') {
-      responseData = getClientResponse(user, ['name', 'mobileNumber','otpExpireTime']);
-    } else {
-      responseData = getVendorResponse(user);
-    }
-    responseData.applications = applicationsArr;
-    const responseObj = getSuccessResponseObject("Token is valid", [responseData]);
-    res.json(responseObj);
-  });
+  let responseData;
+  if (appType === 'CLIENT') {
+    responseData = getClientResponse(user, ['name', 'mobileNumber','otpExpireTime']);
+  } else {
+    responseData = getVendorResponse(user);
+  }
+  // responseData.applications = applicationsArr;
+  responseData.isTokenVerified = true
+  const responseObj = getSuccessResponseObject("Token is valid", responseData);
+  res.json(responseObj);
 });
 
 router.get('/logout-otp', (req, res) => {
@@ -328,6 +316,51 @@ router.get('/logout-otp', (req, res) => {
   res.clearCookie('token'); 
   const responseObj = getSuccessResponseObject("User is logged out successfully", []);
   res.json(responseObj);
+});
+
+// GET /registration-data/:user_id - Requires valid token, returns user data by user_id
+router.get('/registration-data/:user_id', authenticateJWT, async (req, res) => {
+  const { user_id } = req.params;
+  const appType = req.query.appType;
+  if (!user_id) {
+    const responseObj = getFailureResponseObject('Please provide user_id', "ERR_DATA_NOT_FOUND");
+    return res.status(400).json(responseObj);
+  }
+  if (!appType) {
+    const responseObj = getFailureResponseObject('Please provide appType in query params', "ERR_DATA_NOT_FOUND");
+    return res.status(400).json(responseObj);
+  }
+  // Scan DynamoDB for user with matching user_id
+  const params = {
+    TableName: 'user-otp',
+    FilterExpression: 'user_id = :user_id',
+    ExpressionAttributeValues: {
+      ':user_id': user_id
+    }
+  };
+  try {
+    const result = await dynamoDB.scan(params).promise();
+    if (!result.Items || result.Items.length === 0) {
+      const responseObj = getFailureResponseObject('No user found for given user_id', "ERR_DATA_NOT_FOUND");
+      return res.status(404).json(responseObj);
+    }
+    const user = result.Items[0];
+    let responseData;
+    if (appType === 'CLIENT') {
+      responseData = getClientResponse(user);
+    } else if (appType === 'VENDOR') {
+      responseData = getVendorResponse(user);
+    } else {
+      const responseObj = getFailureResponseObject('Invalid appType', "ERR_INVALID_APP_TYPE");
+      return res.status(400).json(responseObj);
+    }
+    const responseObj = getSuccessResponseObject('User data fetched successfully', responseData);
+    res.json(responseObj);
+  } catch (error) {
+    console.error('DynamoDB Error:', error);
+    const responseObj = getErrorResponseObject();
+    res.status(500).json(responseObj);
+  }
 });
 
 module.exports = router;
