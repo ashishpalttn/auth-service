@@ -155,7 +155,7 @@ router.get('/verify-otp', async (req, res) => {
     if (userApplication === 'CLIENT') {
       responseData = getClientResponse(user, ['name', 'mobileNumber']);   
     } else {
-      responseData = getVendorResponse(user, ['location', 'otpExpireTime','otp'] );
+      responseData = getVendorResponse(user, [ 'otpExpireTime','otp'] );
     }
     responseData.token = token;
     responseData.applications = applicationsArr;
