@@ -354,7 +354,7 @@ router.get('/registration-data/:user_id', authenticateJWT, async (req, res) => {
       const responseObj = getFailureResponseObject('Invalid appType', "ERR_INVALID_APP_TYPE");
       return res.status(400).json(responseObj);
     }
-    const responseObj = getSuccessResponseObject('User data fetched successfully', responseData);
+    const responseObj = getSuccessResponseObject('User data fetched successfully', [responseData]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);
