@@ -175,7 +175,7 @@ router.get('/verify-otp', async (req, res) => {
   }
 });
 
-router.post('/signup-otp', async (req, res) => {
+router.post('/user-registration', authenticateJWT, async (req, res) => {
   const {
     user_id,
     appType,
