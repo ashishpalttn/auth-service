@@ -204,8 +204,8 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
       'subCetegory',
       'shopName',
       'shopOwnerName',
-      'address',
-      'location',
+      'fullAddress',
+      'storeGeolocation',
       'isGst'
     ];
   }
