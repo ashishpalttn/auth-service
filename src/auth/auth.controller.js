@@ -199,7 +199,6 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
   } else {
     requiredFields = [
       'appType',
-      'name',
       'mobileNumber',
       'category',
       'subCetegory',
