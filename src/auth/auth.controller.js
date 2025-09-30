@@ -195,7 +195,7 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
   // List of required fields based on application type
   let requiredFields;
   if (appType === 'CLIENT') {
-    requiredFields = ['name', 'mobileNumber'];
+    requiredFields = ['mobileNumber'];
   } else {
     requiredFields = [
       'appType',
