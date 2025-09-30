@@ -206,7 +206,7 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
       'shopOwnerName',
       'fullAddress',
       'storeGeolocation',
-      'isGst'
+      'gst'
     ];
   }
   // Find missing or empty fields
