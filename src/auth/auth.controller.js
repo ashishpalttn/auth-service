@@ -5,7 +5,7 @@ const { authenticateJWT } = require('./auth.middleware');
 const { generateToken } = require('../utils/jwt');
 const { createUserInfo, blacklistToken, isTokenBlacklisted } = require('../utils/authUtils');
 const AWS = require('aws-sdk');
-const { getFailureResponseObject, getSuccessResponseObject, getErrorResponseObject, getClientResponse, getVendorResponse } = require('../utils/util');
+const { getFailureResponseObject, getSuccessResponseObject, getErrorResponseObject, getClientResponse, getVendorResponse, getCustomerResponse } = require('../utils/util');
 const { v4: uuidv4 } = require('uuid');
 
 // Set AWS region
@@ -196,6 +196,8 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
   let requiredFields;
   if (appType === 'CLIENT') {
     requiredFields = ['mobileNumber'];
+  } else if (appType === 'CUSTOMER') {
+    requiredFields = ['user_id', 'appType', 'name', 'mobileNumber', 'fullAddress'];
   } else {
     requiredFields = [
       'appType',
@@ -267,13 +269,20 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
     const user = result.Item;
 
     let responseData;
+    let responseObj 
     if (userApplication === 'CLIENT') {
       responseData = getClientResponse(user);
-    } else {
+      responseObj = getSuccessResponseObject("User is registered/updated successfully", [responseData]);
+    }
+    if(userApplication === 'CUSTOMER'){
+      responseData = getCustomerResponse(user);
+      responseObj = getSuccessResponseObject("Customer is Created/updated successfully", [responseData]);
+    }
+    else {
       responseData = getVendorResponse(user);//in arr pass what you want hide in response
+      getSuccessResponseObject("Vendor is registered/updated successfully", [responseData]);
     }
 
-    const responseObj = getSuccessResponseObject("User is registered/updated successfully", [responseData]);
     res.json(responseObj);
   } catch (error) {
     console.error('DynamoDB Error:', error);

@@ -63,11 +63,25 @@ function getVendorResponse(user, properties=['name','otpExpireTime','otp']) {
     return result;
 }
 
+function getCustomerResponse(user, excludeFields = []) {
+    const fieldsToReturn = ['name', 'mobileNumber', 'fullAddress'];
+    const response = {};
+
+    fieldsToReturn.forEach(field => {
+        if (!excludeFields.includes(field)) {
+            response[field] = user[field];
+        }
+    });
+
+    return response;
+}
+
 module.exports = {
     RESPONSE_OBJECT,
     getSuccessResponseObject,
     getFailureResponseObject,
     getErrorResponseObject,
     getClientResponse,
-    getVendorResponse
+    getVendorResponse,
+    getCustomerResponse
 };
