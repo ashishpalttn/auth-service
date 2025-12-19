@@ -280,7 +280,7 @@ router.post('/user-registration', authenticateJWT, async (req, res) => {
     }
     else {
       responseData = getVendorResponse(user);//in arr pass what you want hide in response
-      getSuccessResponseObject("Vendor is registered/updated successfully", [responseData]);
+      responseObj = getSuccessResponseObject("Vendor is registered/updated successfully", [responseData]);
     }
 
     res.json(responseObj);
