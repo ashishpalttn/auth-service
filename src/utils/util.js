@@ -54,7 +54,7 @@ function getVendorResponse(user, properties=['name','otpExpireTime','otp']) {
     properties.forEach(key => {
         delete result[key];
     });
-    if(user.name && user?.applications?.includes('VENDOR')){
+    if(user?.applications?.includes('VENDOR')){
         result.isRegistered = true;
     }
     else{

@@ -160,12 +160,12 @@ router.get('/verify-otp', async (req, res) => {
     responseData.token = token;
     responseData.applications = applicationsArr;
     responseData.otpVerified = otpVerifiedArr;
-    if(user.name){
-      responseData.isRegistered = true
-    }
-    else{
-      responseData.isRegistered = false
-    }
+    // if(user.name){
+    //   responseData.isRegistered = true
+    // }
+    // else{
+    //   responseData.isRegistered = false
+    // }
     const responseObj = getSuccessResponseObject("User is verified successfully", [responseData]);
     res.json(responseObj);
   } catch (error) {
